@@ -1,0 +1,15 @@
+{
+  "name": "on-top-of-cgol",
+  "version": "1.0.0",
+  "description": "based on: https://github.com/heroku-examples/node-ws-test/issues",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1",
+    "ws": "^7.4.2"
+  }
+}

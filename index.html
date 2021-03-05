@@ -1,0 +1,254 @@
+<html>
+  <head>
+    <script>
+playername=""
+initiated=false
+connectionClosed=false
+function initOnline(){
+      initiated=true
+      playername=String(playernameInput.value)
+      gamemusic.play()
+      gamemusic.volume=0.45
+      instructions.innerHTML=""
+      host = location.origin.replace(/^http/, 'ws')
+      ws = new WebSocket(host);
+      ws.onmessage = function (event) {
+        //console.log(event.data);
+        if(event.data[0]=="{"){
+         movement=[0,0]
+         resetPlacedBlocks()
+         actionSubmitted=false
+         if(blockSupply<20){blockSupply+=0.5}
+         game=JSON.parse(event.data);
+         clearInterval(timerInterval)
+         if(role!="spectator"){
+          timerInterval=setInterval(timerSecond,1000)
+          timer=90
+         }
+         draw()
+         nextturnaudio.play()
+         nextturnaudio.currentTime=0
+         
+        }
+        else{
+         if(event.data[0]=="w"){
+          nextturnaudio.play()
+          nextturnaudio.currentTime=0
+          alert(event.data.slice(1))
+         }
+         else{
+          role=event.data;inQueue=false;draw()
+          clearInterval(timerInterval)
+          blockSupply=20
+          if(role!="spectator"){
+           timerInterval=setInterval(timerSecond,1000)
+           timer=90
+          }
+         }
+        }
+      };
+      ws.onclose=socketCloseMessage
+      ws.onerror=socketCloseMessage
+      keepAliveInterval=setInterval(function(){ws.send("keepAlive");fetch("keepAlive")},30000)
+}
+function socketCloseMessage(event){
+	connectionClosed=true
+	co=c.getContext("2d");
+	co.font='bold 20px serif'
+	co.fillStyle="#f00f00"
+	co.fillText("connection closed",0,20)
+	console.log(event)
+        clearInterval(timerInterval)
+}
+function draw(){
+	var BACKGROUND="#88FFFF"
+	var LIFECELL="#FFFFFF"
+	var DEADCELL="#888888"
+	co=c.getContext("2d")
+	co.font='bold 20px serif'
+	co.fillStyle=BACKGROUND;
+	co.fillRect(0,0,c.width,c.height);
+	
+	if(game.running&&!actionSubmitted&&role!="spectator"){
+		var playercoords=game.players[role].split(",")
+		playercoords[0]=parseInt(playercoords[0])
+		playercoords[1]=parseInt(playercoords[1])
+		co.fillStyle="#8800ff"
+		co.fillRect((playercoords[0]-position[0])*10+440,(playercoords[1]-position[1])*10+190,130,130)
+	}
+	
+	if(role!="spectator"){
+		var playercoords=game.players[role].split(",")
+		playercoords[0]=parseInt(playercoords[0])
+		playercoords[1]=parseInt(playercoords[1])
+		co.fillStyle="#ff44ff"
+		for(ix=-6;ix<=6;ix++){
+			for(iy=-6;iy<=6;iy++){
+				if(placedBlocks[String(ix)+","+String(iy)]==1){
+					co.fillRect((ix-position[0]+playercoords[0]+50)*10,(iy-position[1]+playercoords[1]+25)*10,10,10)
+				}
+			}
+		}
+		/*if placedBlocks was a list
+		placedBlocks.forEach(function(block){
+			co.fillRect((block[0]-position[0]+playercoords[0]+50)*10,(block[1]-position[1]+playercoords[1]+25)*10,10,10)
+		})*/
+	}
+	
+	for(ix=-50;ix<50;ix+=1){
+		for(iy=-25;iy<25;iy+=1){
+			v=game.grid[parseInt(position[0]+ix)+","+parseInt(position[1]+iy)]
+			if(v==undefined){co.fillStyle=BACKGROUND}
+			else{if(v==0){co.fillStyle=DEADCELL}
+			else{co.fillStyle=LIFECELL}}
+			co.fillRect(ix*10+501,iy*10+251,8,8);
+		}
+	}
+	
+	for(i=0;i<2;i++){if(game.homes[String(i)]){
+		if(String(i)==role){co.strokeStyle="#00ff00"}else{co.strokeStyle="#ff0000"}
+		var homecoords=game.homes[String(i)].split(",")
+		homecoords[0]=parseInt(homecoords[0])
+		homecoords[1]=parseInt(homecoords[1])
+		co.strokeRect((homecoords[0]-position[0])*10+502,(homecoords[1]-position[1])*10+252,6,6)
+	}}
+	
+	for(i=0;i<2;i++){
+		if(String(i)==role){co.fillStyle="#00ff00"}else{co.fillStyle="#ff0000"}
+		var playercoords=game.players[String(i)].split(",")
+		playercoords[0]=parseInt(playercoords[0])
+		playercoords[1]=parseInt(playercoords[1])
+		//co.strokeRect((playercoords[0]-position[0])*10+501,(playercoords[1]-position[1])*10+251,8,8)
+		if(String(i)==role){
+			co.fillRect((playercoords[0]+movement[0]-position[0])*10+502,(playercoords[1]+movement[1]-position[1])*10+252,6,6)
+		}else{
+			co.fillRect((playercoords[0]-position[0])*10+502,(playercoords[1]-position[1])*10+252,6,6)
+		}
+	}
+	
+	co.fillStyle="#000000"
+	if(!game.running){
+		if(inQueue){co.fillText("in queue, waiting for players",0,495)}
+		else{co.fillText("press q to join queue",0,495)}}
+	else{if(role=="spectator"){co.fillText("spectator turn:"+game.roundnr,0,495)}
+	else{co.fillText("player,blocks:"+String(blockSupply)+",turn:"+game.roundnr+",action submitted:"+(actionSubmitted?"yes":"no")+",time:"+timer+"s,respawn:"+(game.homes[role]?"yes":"no"),0,495)}}
+	
+	if(connectionClosed){co.fillStyle="#f00f00";co.fillText("connection closed",0,20)}
+}
+
+resetPlacedBlocks=function(){
+	for(ix=-6;ix<=6;ix++){
+		for(iy=-6;iy<=6;iy++){
+			placedBlocks[String(ix)+","+String(iy)]=0
+		}
+	}
+}
+
+var position =[49,74]
+var movement=[0,0]
+var role="spectator"
+var inQueue=false
+var placedBlocks={}
+var blockSupply=20.0
+resetPlacedBlocks()
+var actionSubmitted=false
+var timer=90
+var timerInterval=undefined
+
+function timerSecond(){
+ timer-=1
+ draw()
+ if(timer<=0){
+  clearInterval(timerInterval)
+  actionSubmitted=true
+  action={}
+  action.movement=movement
+  action.blocks=placedBlocks
+  ws.send("a"+JSON.stringify(action))
+  draw()
+ }
+}
+
+onkeydown=function(event){if(initiated){
+	if(event.key=="m"){
+        gamemusic.currentTime=0
+	gamemusic.muted=!gamemusic.muted
+	}
+	if((event.key=="Enter"||event.key==" ")&&role!="spectator"&&!actionSubmitted){
+		clearInterval(timerInterval)
+		timer="x "
+		actionSubmitted=true
+		action={}
+		action.movement=movement
+		action.blocks=placedBlocks
+		ws.send("a"+JSON.stringify(action))
+		draw()
+	}
+	if(event.key=="q"&&role=="spectator"){
+		ws.send("q"+playername);inQueue=true;draw()
+	}
+	
+	if(event.key=="ArrowUp"){position[1]-=1;draw()}
+	else{if(event.key=="ArrowDown"){position[1]+=1;draw()}
+	else{if(event.key=="ArrowLeft"){position[0]-=1;draw()}
+	else{if(event.key=="ArrowRight"){position[0]+=1;draw()}
+	}}}
+	if(event.key=="c"){
+		if(role=="spectator"){position=[49,49];draw()}
+		else{position=playercoords=game.players[role].split(",");position[0]=parseInt(position[0]);position[1]=parseInt(position[1]);draw()}
+	}
+}}
+
+onclick=function(event){if(initiated&&!actionSubmitted&&role!="spectator"){
+	//co=c.getContext("2d")
+	var playercoords=game.players[role].split(",")
+	playercoords[0]=parseInt(playercoords[0])
+	playercoords[1]=parseInt(playercoords[1])
+	//co.fillStyle="yellow"
+	var clickedBlock=
+		[Math.floor(event.x*c.width/window.innerWidth/10)-50+position[0]-playercoords[0],
+		Math.floor(event.y*c.height/window.innerHeight/10)-25+position[1]-playercoords[1]]
+	
+	if(clickedBlock[0]>=-6&&clickedBlock[0]<=6&&clickedBlock[1]>=-6&&clickedBlock[1]<=6&&
+	clickedBlock[0]+playercoords[0]>=0&&clickedBlock[1]+playercoords[1]>=0&&clickedBlock[0]+playercoords[0]<100&&clickedBlock[1]+playercoords[1]<100){
+		clickedBlockString=String(clickedBlock[0])+","+String(clickedBlock[1])
+		//console.log(placedBlocks[clickedBlockString])
+		if(placedBlocks[clickedBlockString]==0){
+			if(blockSupply>=1){placedBlocks[clickedBlockString]=1;blockSupply-=1}
+		}
+		else{placedBlocks[clickedBlockString]=0;blockSupply+=1}
+		//console.log(clickedBlock)
+		draw()
+		//co.fillRect(Math.floor(event.x*c.width/window.innerWidth/10)*10,Math.floor(event.y*c.height/window.innerHeight/10)*10,10,10)
+	}
+}}
+
+oncontextmenu=function(event){
+	event.preventDefault()
+	if(initiated&&!actionSubmitted&&role!="spectator"){
+	//co=c.getContext("2d")
+	var playercoords=game.players[role].split(",")
+	playercoords[0]=parseInt(playercoords[0])
+	playercoords[1]=parseInt(playercoords[1])
+	//co.fillStyle="yellow"
+	var clickedBlock=
+		[Math.floor(event.x*c.width/window.innerWidth/10)-50+position[0]-playercoords[0],
+		Math.floor(event.y*c.height/window.innerHeight/10)-25+position[1]-playercoords[1]]
+	if(clickedBlock[0]>=-6&&clickedBlock[0]<=6&&clickedBlock[1]>=-6&&clickedBlock[1]<=6&&
+	clickedBlock[0]+playercoords[0]>=0&&clickedBlock[1]+playercoords[1]>=0&&clickedBlock[0]+playercoords[0]<100&&clickedBlock[1]+playercoords[1]<100){
+		movement=clickedBlock
+		draw()
+	}
+	//co.fillRect(Math.floor(event.x*c.width/window.innerWidth/10)*10,Math.floor(event.y*c.height/window.innerHeight/10)*10,10,10)
+}}
+
+    </script>
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+  </head>
+  <body>
+    <audio id=nextturnaudio src="next turn.mp3" preload=auto></audio>
+    <audio id=gamemusic src="on-top-of-cgol-game-music.ogg" preload=auto loop=true></audio>
+    <canvas id="c" style="width:100%;height:100%;left:0;top:0;position:absolute;" width=1000 height=500></canvas>
+    <div id=instructions style="position:absolute">There is a grid which simulates conway's game of life, and you are on top of it.<br>This is a turn based game. Press <b>'m'</b> to toggle the music. You can look around by pressing the <b>arrow keys</b>. Return to the grid or to your player by pressing <b>'c'</b>.<br>As a player, you <b>left-click</b> the purple area to build blocks and <b>right-click</b> the area to move the player. Your block supply is limited. To submit your action, press <b>"Enter"(and don't accidentally reload the page) or the "space bar"</b> or wait until the <b>timer runs out</b> and your action is automatically submitted.<br>You survive if you right-click a living(white) cell. You <b>can't survive on freshly built blocks</b>, because they are built after you move. The new blocks are built onto the grid after the grid updates itself. If you die, you respawn as long as your <b>home point</b> exists, home points are destroyed when the ground below them becomes a dead cell.<br>You win if you destroy the ground below the enemy's home point and then make the enemy player unable to move to a living cell. That means, you lose if the cell below your home point dies and then you die. If you and your enemy walk to the same place, both players die. If the game reaches turn 1000, both players lose.<br>For playing the game, it's recommended that you know how to build a <b>glider</b> and a <b>spaceship</b>.<br>challenge: build a simkin glider gun(or any other glider gun) and survive. Though, for winning the game, building a gun is probably a bad strategy.<br> game by conjurer. Discord:https://discord.gg/bUEzUcpKFe <br>If you want to make a mod of this game or make a similiar game, feel free to do so. For example, what if this game was time-based instead of turn-based? <br> <input id="playernameInput" placeholder="enter player name" maxlength="19"></input><button onclick=initOnline()>i've read the instructions</button> </div>
+</body>
+</html>
